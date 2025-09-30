@@ -1,38 +1,67 @@
-const WebSocket = require('ws')
-const os = require('os')
-require('dotenv').config()
+require('dotenv').config();
+const http = require('http');
+const express = require('express');
+const cors = require('cors');
+const WebSocket = require('ws');
+const jwt = require('jsonwebtoken');
 
-const PORT = process.env.PORT || 5000
-const wss = new WebSocket.Server({ port: PORT });
+const app = express();
+app.use(express.json());
+app.use(cors());
 
-// URL example: ws://my-server?token=my-secret-token
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
+
+// Minimal HTTP route for heartbeat
+app.get('/', (req, res) => res.send('WebSocket server running'));
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+const clients = new Set();
+
 wss.on('connection', (ws, req) => {
-    console.log('Client connected');
+  const urlParams = new URLSearchParams(req.url.slice(1));
+  const token = urlParams.get('token');
 
-    // Check valid token (set token in .env as TOKEN=my-secret-token )
-    const urlParams = new URLSearchParams(req.url.slice(1));
-    if (urlParams.get('token') !== process.env.TOKEN) {
-        console.log('Invalid token: ' + urlParams.get('token'));
-        ws.send(JSON.stringify({
-            status: 1,
-            msg: 'ERROR: Invalid token.'
-        }));
-        ws.close();
-    }
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    console.log('✅ Client connected:', payload);
+
+    clients.add(ws);
 
     ws.on('message', (message) => {
-        console.log('Received message:', message);
+      console.log('Received:', message);
 
-        // Send a response back to the client along with some other info
-        ws.send(JSON.stringify({
+      // Broadcast message to all connected clients
+      clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
             status: 0,
-            msg: String(message).toUpperCase(),
-            freemem: Math.round(os.freemem() / 1024 / 1024), // MB
-            totalmem: Math.round(os.totalmem() / 1024 / 1024) // MB
-        }));
+            msg: String(message),
+            from: payload.email || payload.user || 'unknown'
+          }));
+        }
+      });
     });
 
     ws.on('close', () => {
-        console.log('Client disconnected');
+      clients.delete(ws);
+      console.log(' Client disconnected');
     });
+
+  } catch (err) {
+    console.log(' Invalid token:', err.message);
+    try {
+      if (err.name === 'TokenExpiredError') {
+        ws.send(JSON.stringify({ status: 1, msg: 'ERROR: Token expired' }));
+      } else {
+        ws.send(JSON.stringify({ status: 1, msg: 'ERROR: Invalid token' }));
+      }
+    } catch (e) {}
+    ws.close();
+  }
+});
+
+server.listen(PORT, () => {
+  console.log(`WebSocket server running on ws://localhost:${PORT}`);
 });

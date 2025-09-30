@@ -1,56 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Demo</title>
-
+  <meta charset="UTF-8">
+  <title>WebSocket Demo</title>
+  <style>
+    #status.connected { color: green; }
+    #status.disconnected { color: red; }
+    #status.connecting { color: orange; }
+    textarea { width: 100%; }
+    .hidden { display: none; }
+  </style>
 </head>
-
-<!-- Works with ws-node in this repo -->
-    
 <body>
-    <input id="in" type="text" placeholder="Write to convert to upper case">
+  <div id="login-container">
+    <h2>Login</h2>
+    <form id="loginForm">
+      <input type="email" id="email" placeholder="Email" required />
+      <input type="password" id="password" placeholder="Password" required />
+      <button type="submit">Login</button>
+    </form>
+  </div>
+
+  <div id="app" class="hidden">
+    <h3>Status: <span id="status" class="disconnected">Disconnected</span></h3>
+    <button id="reconnect">Reconnect</button>
+    <button id="logoutBtn">Logout</button>
+    <br><br>
+
+    <input id="in" type="text" placeholder="Write a message">
     <p id="out">...</p>
     <p id="err" style="color: red;"></p>
+  </div>
 
-    <script>
-        WS_TOKEN = localStorage.getItem('ws_token') || 'my-secret-token';
-        console.log(WS_TOKEN);
+  <script>
+const LOGIN_API = "http://localhost:8080/users/login";
+const REFRESH_API = "http://localhost:8080/refresh";
+const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:5000`;
 
-        // Create a WebSocket connection
-        const socket = new WebSocket(`ws://localhost:5000?token=${WS_TOKEN}`);
+let socket;
+const statusEl = document.querySelector('#status');
+const reconnectBtn = document.querySelector('#reconnect');
+const outEl = document.querySelector('#out');
+const errEl = document.querySelector('#err');
+const inputEl = document.querySelector('#in');
+const loginForm = document.querySelector('#loginForm');
+const logoutBtn = document.querySelector('#logoutBtn');
+const loginContainer = document.querySelector('#login-container');
+const appContainer = document.querySelector('#app');
 
-        // Connection established 
-        socket.onopen = function (event) {
-            console.log('Connected to WebSocket server');
-        };
+function setStatus(s) {
+  statusEl.textContent = s;
+  statusEl.className = s.toLowerCase();
+}
 
-        // Message listener
-        socket.onmessage = function (event) {
-            console.log('Received message:', event.data);
-            const data = JSON.parse(event.data);
+function saveTokens(accessToken, refreshToken) {
+  localStorage.setItem('accessToken', accessToken);
+  localStorage.setItem('refreshToken', refreshToken);
+}
+function loadAccessToken() { return localStorage.getItem('accessToken') || ''; }
+function loadRefreshToken() { return localStorage.getItem('refreshToken') || ''; }
+function clearTokens() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
 
-            if (data.status == 0) {
-                document.querySelector('#out').innerHTML = data.msg;
-                document.querySelector('#err').innerHTML = '';
-            } else {
-                document.querySelector('#err').innerHTML = data.msg;
-            }
-            
-        };
+async function login(email, password) {
+  const res = await fetch(LOGIN_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password })
+  });
+  if (!res.ok) throw new Error("Login failed");
+  const data = await res.json();
+  return { accessToken: data.accessToken, refreshToken: data.refreshToken };
+}
 
-        // Connection closed 
-        socket.onclose = function (event) {
-            console.log('Connection closed');
-        };
+async function refreshAccessToken() {
+  const refreshToken = loadRefreshToken();
+  const res = await fetch(REFRESH_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken })
+  });
+  if (!res.ok) throw new Error("Failed to refresh token");
+  const data = await res.json();
+  saveTokens(data.accessToken, data.refreshToken);
+  return data.accessToken;
+}
 
-        document.querySelector('#in').addEventListener('input', (evt) => {
-            socket.send(evt.target.value);
-        });
-    </script>
+function attachInputListener() {
+  if (inputEl._wsAttached) return;
+  inputEl.addEventListener('input', (evt) => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(evt.target.value);
+    }
+  });
+  inputEl._wsAttached = true;
+}
+
+async function connect() {
+  setStatus('Connecting');
+  errEl.textContent = '';
+  let token = loadAccessToken();
+  if (!token) {
+    setStatus('Disconnected');
+    return;
+  }
+
+  socket = new WebSocket(`${WS_BASE}?token=${token}`);
+
+  socket.onopen = () => setStatus('Connected');
+
+  socket.onmessage = async (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.status === 0) {
+        outEl.textContent = data.msg + (data.from ? (' (from ' + data.from + ')') : '');
+        errEl.textContent = '';
+      } else {
+        errEl.textContent = data.msg || 'Server error';
+        if (String(data.msg).toLowerCase().includes('expired')) {
+          try {
+            token = await refreshAccessToken();
+            socket.close();
+            connect();
+          } catch (e) {
+            console.error("Re-login required", e);
+            clearTokens();
+            appContainer.classList.add("hidden");
+            loginContainer.classList.remove("hidden");
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse message', e);
+    }
+  };
+
+  socket.onclose = () => setStatus('Disconnected');
+  socket.onerror = (e) => console.error('WebSocket error', e);
+
+  attachInputListener();
+}
+
+// --- UI HANDLERS ---
+loginForm.addEventListener("submit", async e => {
+  e.preventDefault();
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  try {
+    const { accessToken, refreshToken } = await login(email, password);
+    saveTokens(accessToken, refreshToken);
+    loginContainer.classList.add("hidden");
+    appContainer.classList.remove("hidden");
+    connect();
+  } catch (err) {
+    alert("Login failed: " + err.message);
+  }
+});
+
+logoutBtn.addEventListener("click", async () => {
+  const refreshToken = loadRefreshToken();
+  try {
+    await fetch(REFRESH_API, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken })
+    });
+  } catch (e) {
+    console.warn("Logout request failed", e);
+  }
+  clearTokens();
+  location.reload();
+});
+
+reconnectBtn.addEventListener('click', async () => {
+  try {
+    await refreshAccessToken();
+    if (socket) socket.close();
+    connect();
+  } catch (e) {
+    errEl.textContent = 'Reconnect failed: ' + e.message;
+  }
+});
+
+// auto-connect if tokens exist
+if (loadAccessToken()) {
+  loginContainer.classList.add("hidden");
+  appContainer.classList.remove("hidden");
+  connect();
+}
+</script>
 
 </body>
-
 </html>

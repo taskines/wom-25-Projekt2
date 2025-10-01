@@ -72,7 +72,7 @@ async function login(email, password) {
   });
   if (!res.ok) throw new Error("Login failed");
   const data = await res.json();
-  return { accessToken: data.accessToken, refreshToken: data.refreshToken };
+  return { accessToken: data.jwt, refreshToken: null }; // använd jwt från backend
 }
 
 async function refreshAccessToken() {
@@ -185,7 +185,7 @@ reconnectBtn.addEventListener('click', async () => {
   }
 });
 
-// auto-connect if tokens exist
+// auto-connect om tokens existerar
 if (loadAccessToken()) {
   loginContainer.classList.add("hidden");
   appContainer.classList.remove("hidden");

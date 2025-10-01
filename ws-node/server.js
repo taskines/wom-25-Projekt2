@@ -9,15 +9,18 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key';
+const PORT = process.env.PORT || 5001;
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// Minimal HTTP route for heartbeat
+
 app.get('/', (req, res) => res.send('WebSocket server running'));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const clients = new Set();
+
+//console.log("JWT_SECRET:", JWT_SECRET);
+
 
 wss.on('connection', (ws, req) => {
   const urlParams = new URLSearchParams(req.url.slice(1));
@@ -25,14 +28,13 @@ wss.on('connection', (ws, req) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    console.log('✅ Client connected:', payload);
+    console.log('Client connected:', payload);
 
     clients.add(ws);
 
     ws.on('message', (message) => {
       console.log('Received:', message);
 
-      // Broadcast message to all connected clients
       clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({

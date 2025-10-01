@@ -35,7 +35,7 @@
   <script>
 const LOGIN_API = "http://localhost:8080/users/login";
 const REFRESH_API = "http://localhost:8080/refresh";
-const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:5000`;
+const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:5001`;
 
 let socket;
 const statusEl = document.querySelector('#status');
@@ -72,7 +72,8 @@ async function login(email, password) {
   });
   if (!res.ok) throw new Error("Login failed");
   const data = await res.json();
-  return { accessToken: data.jwt, refreshToken: null }; // använd jwt från backend
+  console.log("Login response:", data); // tarkista mitä backend lähettää
+  return { accessToken: data.accessToken, refreshToken: data.refreshToken };
 }
 
 async function refreshAccessToken() {

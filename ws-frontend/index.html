@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WebSocket Demo</title>
+  <title>Browser WebSocket Client</title>
   <style>
     #status.connected { color: green; }
     #status.disconnected { color: red; }
@@ -35,7 +35,7 @@
   <script>
 const LOGIN_API = "http://localhost:8080/users/login";
 const REFRESH_API = "http://localhost:8080/refresh";
-const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:5001`;
+const WS_BASE = `ws://${location.hostname}:5001`;
 
 let socket;
 const statusEl = document.querySelector('#status');
@@ -72,7 +72,6 @@ async function login(email, password) {
   });
   if (!res.ok) throw new Error("Login failed");
   const data = await res.json();
-  console.log("Login response:", data); // tarkista mitä backend lähettää
   return { accessToken: data.accessToken, refreshToken: data.refreshToken };
 }
 
@@ -91,11 +90,17 @@ async function refreshAccessToken() {
 
 function attachInputListener() {
   if (inputEl._wsAttached) return;
-  inputEl.addEventListener('input', (evt) => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(evt.target.value);
+  
+  inputEl.addEventListener('keydown', (evt) => {
+    if (evt.key === "Enter") {
+      evt.preventDefault();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ msg: inputEl.value, from: "Browser" }));
+        inputEl.value = "";
+      }
     }
   });
+
   inputEl._wsAttached = true;
 }
 
@@ -116,7 +121,7 @@ async function connect() {
     try {
       const data = JSON.parse(ev.data);
       if (data.status === 0) {
-        outEl.textContent = data.msg + (data.from ? (' (from ' + data.from + ')') : '');
+        outEl.textContent = `${data.msg} (from ${data.from || "unknown"})`;
         errEl.textContent = '';
       } else {
         errEl.textContent = data.msg || 'Server error';
@@ -134,7 +139,7 @@ async function connect() {
         }
       }
     } catch (e) {
-      console.error('Failed to parse message', e);
+      console.error('Invalid WS message', ev.data);
     }
   };
 
@@ -186,7 +191,6 @@ reconnectBtn.addEventListener('click', async () => {
   }
 });
 
-// auto-connect om tokens existerar
 if (loadAccessToken()) {
   loginContainer.classList.add("hidden");
   appContainer.classList.remove("hidden");

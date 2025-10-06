@@ -32,7 +32,7 @@ wss.on('connection', (ws, req) => {
     clients.add(ws);
 
     ws.on('message', (message) => {
-      console.log('📩 Received:', message.toString());
+     
 
       // Broadcast åt alla andra
       clients.forEach(client => {

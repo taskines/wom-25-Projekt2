@@ -14,38 +14,50 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 app.get('/', (req, res) => res.send('WebSocket server running'));
 
+// Create HTTP server and WebSocket server
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const clients = new Set();
 
 wss.on('connection', (ws, req) => {
-  // Plocka token från query-param
+  // Extract JWT token from query string
   const urlParams = new URLSearchParams(req.url.slice(1));
   const token = urlParams.get('token');
 
   let payload;
   try {
+    // Verify token
     payload = jwt.verify(token, JWT_SECRET);
     console.log('Client connected:', payload.email || payload.sub);
 
+    // Save user info in connection
     ws.user = payload;
     clients.add(ws);
 
+    // Handle incoming messages
     ws.on('message', (message) => {
-     
+      let parsed;
 
-      // Broadcast åt alla andra
+      // Try to parse JSON message from client
+      try {
+        parsed = JSON.parse(message);
+      } catch {
+        parsed = { msg: message.toString(), from: 'Unknown' };
+      }
+
+      // Broadcast to all *other* connected clients
       clients.forEach(client => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({
             status: 0,
-            msg: message.toString(),
-            from: payload.email || payload.user || 'unknown'
+            msg: parsed.msg,
+            from: parsed.from || payload.email || 'unknown'
           }));
         }
       });
     });
 
+    // Handle disconnection
     ws.on('close', () => {
       clients.delete(ws);
       console.log('Client disconnected');
@@ -53,6 +65,7 @@ wss.on('connection', (ws, req) => {
 
   } catch (err) {
     console.log('Invalid token:', err.message);
+
     try {
       if (err.name === 'TokenExpiredError') {
         ws.send(JSON.stringify({ status: 1, msg: 'ERROR: Token expired' }));
@@ -60,10 +73,11 @@ wss.on('connection', (ws, req) => {
         ws.send(JSON.stringify({ status: 1, msg: 'ERROR: Invalid token' }));
       }
     } catch (e) {}
+
     ws.close();
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`WebSocket server running on ws://localhost:${PORT}`);
+  console.log(`✅ WebSocket server running on ws://localhost:${PORT}`);
 });

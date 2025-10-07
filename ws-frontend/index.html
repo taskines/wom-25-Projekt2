@@ -3,37 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <title>Browser WebSocket Client</title>
-  <style>
-    #status.connected { color: green; }
-    #status.disconnected { color: red; }
-    #status.connecting { color: orange; }
-    textarea { width: 100%; }
-    .hidden { display: none; }
-  </style>
+    <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <div id="login-container">
-    <h2>Login</h2>
+  <h2>💬 Browser WebSocket Client</h2>
+
+  <!-- Login -->
+  <div id="login-container" class="card">
+    <h3>Login</h3>
     <form id="loginForm">
       <input type="email" id="email" placeholder="Email" required />
       <input type="password" id="password" placeholder="Password" required />
       <button type="submit">Login</button>
     </form>
+    <p class="small-text">Sign in to start sending messages through the WebSocket server.</p>
   </div>
 
-  <div id="app" class="hidden">
+  <!-- App -->
+  <div id="app" class="card hidden">
     <h3>Status: <span id="status" class="disconnected">Disconnected</span></h3>
-    <button id="reconnect">Reconnect</button>
-    <button id="logoutBtn">Logout</button>
-    <br><br>
 
-    <input id="in" type="text" placeholder="Write a message">
-    <p id="out">...</p>
-    <p id="err" style="color: red;"></p>
+    <div class="actions">
+      <button id="reconnect">Reconnect</button>
+      <button id="logoutBtn" style="background:#ef4444;">Logout</button>
+    </div>
+
+    <input id="in" type="text" placeholder="Write a message..." />
+    <div id="out"></div>
+    <p id="err"></p>
   </div>
 
-  <script src="script.js">
-  </script>
+  <footer>WebSocket Pastebin Server Client © 2025</footer>
 
+  <script src="script.js"></script>
 </body>
 </html>

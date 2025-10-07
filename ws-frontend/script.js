@@ -55,7 +55,7 @@ async function refreshAccessToken() {
 
 function attachInputListener() {
   if (inputEl._wsAttached) return;
-  
+
   inputEl.addEventListener('keydown', (evt) => {
     if (evt.key === "Enter") {
       evt.preventDefault();
@@ -85,10 +85,20 @@ async function connect() {
   socket.onmessage = async (ev) => {
     try {
       const data = JSON.parse(ev.data);
+      //ChatGPT-4 fixade så att stylen fungerade
       if (data.status === 0) {
-        outEl.textContent = `${data.msg} (from ${data.from || "unknown"})`;
+        const msgDiv = document.createElement('div');
+        msgDiv.textContent = `${data.from || "unknown"}: ${data.msg}`;
+        msgDiv.style.padding = "6px 8px";
+        msgDiv.style.background = "rgba(255, 255, 255, 0.04)";
+        msgDiv.style.borderRadius = "8px";
+        msgDiv.style.margin = "4px 0";
+        msgDiv.style.fontFamily = "monospace";
+        outEl.appendChild(msgDiv);
+        outEl.scrollTop = outEl.scrollHeight;
         errEl.textContent = '';
-      } else {
+      }
+      else {
         errEl.textContent = data.msg || 'Server error';
         if (String(data.msg).toLowerCase().includes('expired')) {
           try {
@@ -114,7 +124,7 @@ async function connect() {
   attachInputListener();
 }
 
-// --- UI HANDLERS ---
+
 loginForm.addEventListener("submit", async e => {
   e.preventDefault();
   const email = document.getElementById("email").value;
